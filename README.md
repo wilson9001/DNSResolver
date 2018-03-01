@@ -9,8 +9,7 @@ The recursive DNS server does the hard work of tracking down the answer by issui
 In this lab the effort will be in communicating effectively with an actual DNS server by implementing the protocol.
 
 #Downloading the assignment
-The files for the lab will made available from a link in the “assignment” page for the lab on the course site on Learning Suite, as a single archive file, dnsresolverlab-handout.tar.
-Start by copying dnsresolverlab-handout.tar to a protected Linux directory in which you plan to do your work. Then give the command
+The files for the lab will made available from a link in the “assignment” page for the lab on the course site on Learning Suite, as a single archive file, dnsresolverlab-handout.tar. Start by copying dnsresolverlab-handout.tar to a protected Linux directory in which you plan to do your work. Then give the command
 
     linux> tar xvf dnsresolverlab-handout.tar
 
