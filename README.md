@@ -30,7 +30,7 @@ Its output should match that of the reference implementation, resolver-ref:
 There are various tasks associated with building a DNS stub resolver.
 
 ##Building a DNS Query Message
-The first task is organizing the various components of the DNS query into a DNS query message. The query message is simply an array of unsigned char, which can be transmitted to the server over a UDP socket. Building the contents of that array is a matter of organizing and formatting the query components according to the DNS protocol specification. There are two major parts to the DNS query message: the DNS header and the DNS question section, which contains the query. The DNS header and query are organized as shown in the following page: http://www.networksorcery.com/enp/protocol/dns.htm in the sections under “DNS header:” and “Query. Variable length”, respectively. For example, a query for www.example.com looks like this:
+The first task is organizing the various components of the DNS query into a DNS query message. The query message is simply an array of unsigned char, which can be transmitted to the server over a UDP socket. Building the contents of that array is a matter of organizing and formatting the query components according to the DNS protocol specification. There are two major parts to the DNS query message: the DNS header and the DNS question section, which contains the query. The DNS header and query are organized as shown in the following page: http://www.networksorcery.com/enp/protocol/dns.htm in the sections under “DNS header:” and “Query.Variablelength”, respectively. For example, a query for www.example.com looks like this:
 27 d6 01 00
 00 01 00 00
 00 00 00 00
