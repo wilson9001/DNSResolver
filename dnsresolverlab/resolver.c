@@ -1,12 +1,14 @@
-#include<arpa/inet.h>
-#include<netinet/in.h>
-#include<stdio.h>
-#include<string.h>
-#include<stdlib.h>
-#include<time.h>
-#include<sys/types.h>
-#include<sys/socket.h>
-#include<stdbool.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <time.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <stdbool.h>
+
+#define MAXLENGTH = 2000;
 
 typedef unsigned int dns_rr_ttl;
 typedef unsigned short dns_rr_type;
@@ -16,7 +18,8 @@ typedef unsigned short dns_rr_count;
 typedef unsigned short dns_query_id;
 typedef unsigned short dns_flags;
 
-typedef struct {
+typedef struct
+{
 	char *name;
 	dns_rr_type type;
 	dns_rr_class class;
@@ -26,54 +29,79 @@ typedef struct {
 } dns_rr;
 
 struct dns_answer_entry;
-struct dns_answer_entry {
+struct dns_answer_entry
+{
 	char *value;
 	struct dns_answer_entry *next;
 };
 typedef struct dns_answer_entry dns_answer_entry;
 
-void print_bytes(unsigned char *bytes, int byteslen) {
+void print_bytes(unsigned char *bytes, int byteslen)
+{
 	int i, j, byteslen_adjusted;
 	unsigned char c;
 
-	if (byteslen % 8) {
+	if (byteslen % 8)
+	{
 		byteslen_adjusted = ((byteslen / 8) + 1) * 8;
-	} else {
+	}
+	else
+	{
 		byteslen_adjusted = byteslen;
 	}
-	for (i = 0; i < byteslen_adjusted + 1; i++) {
-		if (!(i % 8)) {
-			if (i > 0) {
-				for (j = i - 8; j < i; j++) {
-					if (j >= byteslen_adjusted) {
+	for (i = 0; i < byteslen_adjusted + 1; i++)
+	{
+		if (!(i % 8))
+		{
+			if (i > 0)
+			{
+				for (j = i - 8; j < i; j++)
+				{
+					if (j >= byteslen_adjusted)
+					{
 						printf("  ");
-					} else if (j >= byteslen) {
+					}
+					else if (j >= byteslen)
+					{
 						printf("  ");
-					} else if (bytes[j] >= '!' && bytes[j] <= '~') {
+					}
+					else if (bytes[j] >= '!' && bytes[j] <= '~')
+					{
 						printf(" %c", bytes[j]);
-					} else {
+					}
+					else
+					{
 						printf(" .");
 					}
 				}
 			}
-			if (i < byteslen_adjusted) {
+			if (i < byteslen_adjusted)
+			{
 				printf("\n%02X: ", i);
 			}
-		} else if (!(i % 4)) {
+		}
+		else if (!(i % 4))
+		{
 			printf(" ");
 		}
-		if (i >= byteslen_adjusted) {
+		if (i >= byteslen_adjusted)
+		{
 			continue;
-		} else if (i >= byteslen) {
+		}
+		else if (i >= byteslen)
+		{
 			printf("   ");
-		} else {
+		}
+		else
+		{
 			printf("%02X ", bytes[i]);
 		}
 	}
 	printf("\n");
 }
 
-void canonicalize_name(char *name) {
+void canonicalize_name(char *name)
+{
 	/*
 	 * Canonicalize name in place.  Change all upper-case characters to
 	 * lower case and remove the trailing dot if there is any.  If the name
@@ -82,23 +110,27 @@ void canonicalize_name(char *name) {
 	 *
 	 * INPUT:  name: the domain name that should be canonicalized in place
 	 */
-	
+
 	int namelen, i;
 
 	// leave the root zone alone
-	if (strcmp(name, ".") == 0) {
+	if (strcmp(name, ".") == 0)
+	{
 		return;
 	}
 
 	namelen = strlen(name);
 	// remove the trailing dot, if any
-	if (name[namelen - 1] == '.') {
+	if (name[namelen - 1] == '.')
+	{
 		name[namelen - 1] = '\0';
 	}
 
 	// make all upper-case letters lower case
-	for (i = 0; i < namelen; i++) {
-		if (name[i] >= 'A' && name[i] <= 'Z') {
+	for (i = 0; i < namelen; i++)
+	{
+		if (name[i] >= 'A' && name[i] <= 'Z')
+		{
 			name[i] += 32;
 		}
 	}
@@ -114,11 +146,41 @@ void canonicalize_name(char *name) {
 	 *              wire-formatted name should be constructed
 	 * OUTPUT: the length of the wire-formatted name.
 	 */
-int name_ascii_to_wire(char *name, unsigned char *wire) {
-	
+int name_ascii_to_wire(char *name, unsigned char *wire)
+{
+	const char separator[2] = ".";
+	int offset = 0;
+
+	char *token;
+
+	//get first token
+	token = strtok(name, separator);
+
+	//add to wire and then get rest of tokens
+	while (token)
+	{
+		//add length of next section to wire
+		unsigned char tokenLength = (unsigned char)strlen(token);
+		*wire = tokenLength;
+		wire++;
+		offset++;
+
+		//add each character to wire
+		for (unsigned char i = 0; i < tokenLength; i++)
+		{
+			*wire = (unsigned char)token[i];
+			wire++;
+			offset++;
+		}
+
+		token = strtok(NULL, separator);
+	}
+
+	return offset;
 }
 
-char *name_ascii_from_wire(unsigned char *wire, int *indexp) {
+char *name_ascii_from_wire(unsigned char *wire, int *indexp)
+{
 	/* 
 	 * Extract the wire-formatted DNS name at the offset specified by
 	 * *indexp in the array of bytes provided (wire) and return its string
@@ -134,7 +196,8 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp) {
 	 */
 }
 
-dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only) {
+dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
+{
 	/* 
 	 * Extract the wire-formatted resource record at the offset specified by
 	 * *indexp in the array of bytes provided (wire) and return a 
@@ -169,17 +232,18 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only) {
 	 * OUTPUT: the length of the wire-formatted resource record.
 	 *
 	 */
-int rr_to_wire(dns_rr rr, unsigned char *wire, int query_only) {
-	
-	if(query_only)
+int rr_to_wire(dns_rr rr, unsigned char *wire, int query_only)
+{
+
+	if (query_only)
 	{
 		dns_rr_class class = rr.class;
 		dns_rr_type type = rr.type;
 
 		unsigned char class1 = *((unsigned char *)&class);
-		unsigned char class2 = *((unsigned char *)&class +1);
+		unsigned char class2 = *((unsigned char *)&class + 1);
 		unsigned char type1 = *((unsigned char *)&type);
-		unsigned char type2 = *((unsigned char *)&type +1);
+		unsigned char type2 = *((unsigned char *)&type + 1);
 
 		*wire = type1;
 		wire++;
@@ -199,49 +263,91 @@ int rr_to_wire(dns_rr rr, unsigned char *wire, int query_only) {
 }
 
 /* 
-	 * Create a wire-formatted DNS (query) message using the provided byte
-	 * array (wire).  Create the header and question sections, including
-	 * the qname and qtype.
-	 *
-	 * INPUT:  qname: the string containing the name to be queried
-	 * INPUT:  qtype: the integer representation of type of the query (type A == 1)
-	 * INPUT:  wire: the pointer to the array of bytes where the DNS wire
-	 *               message should be constructed
-	 * OUTPUT: the length of the DNS wire message
-	 */
-unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *wire) {
+	* Create a wire-formatted DNS (query) message using the provided byte
+	* array (wire).  Create the header and question sections, including
+	* the qname and qtype.
+	*
+	* INPUT:  qname: the string containing the name to be queried
+	* INPUT:  qtype: the integer representation of type of the query (type A == 1)
+	* INPUT:  wire: the pointer to the array of bytes where the DNS wire message should be constructed
+	* OUTPUT: the length of the DNS wire message
+*/
+unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *wire)
+{
 	//Create header values
 	//dns_rr_type RRType = 0x01;
 	dns_rr_class RRClass = 0x0001;
 	dns_rr_count RRCount = 0;
+	dns_flags flags = 0x0100;
+	unsigned short offset = 0;
 
 	//Create random ID for query
 	srand(time(NULL));
-	dns_query_id queryID = (unsigned short) rand();
+	dns_query_id queryID = (unsigned short)rand();
 
-	dns_flags flags = 0x0100;
+	unsigned char ID1 = *((unsigned char *)&queryID);
+	unsigned char ID2 = *((unsigned char *)&queryID + 1);
+	unsigned char flags1 = *((unsigned char *)&flags);
+	unsigned char flags2 = *((unsigned char *)&flags + 1);
 
-	//Convert query name to char[] 
-	if(!name_ascii_to_wire(qname, wire))
+	//begin wire with query ID
+	*wire = ID1;
+	wire++;
+	offset++;
+	*wire = ID2;
+	wire++;
+	offset++;
+	//add flags
+	*wire = flags1;
+	wire++;
+	offset++;
+	*wire = flags2;
+	wire++;
+	offset++;
+	//Total questions = 1
+	*wire = 0;
+	wire++;
+	offset++;
+	*wire = 0x01;
+	wire++;
+	offset++;
+	//No RR's
+	for (int i = 0; i < 5; i++)
+	{
+		*wire = 0;
+		wire++;
+		offset++;
+	}
+
+	//Convert query name to unsigned char[]
+	int nameBytes = name_ascii_to_wire(qname, wire);
+
+	if (!nameBytes)
 	{
 		fprintf(stderr, "Failed to convert query name to DNS format!\n");
 		exit(EXIT_FAILURE);
 	}
 
+	offset += (unsigned short)nameBytes;
+
 	dns_rr resourceRecord;
 	resourceRecord.class = RRClass;
 	resourceRecord.type = qtype;
 
-	if(!rr_to_wire(resourceRecord, wire, true))
+	int rrBytes = rr_to_wire(resourceRecord, wire, true);
+	if (!rrBytes)
 	{
 		fprintf(stderr, "Failed to convert resource record to DNS format!\n");
 		exit(EXIT_FAILURE);
 	}
 
-	return strlen(wire);
+	offset += (unsigned short)rrBytes;
+
+	return offset;
 }
 
-dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned char *wire) {
+dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned char *wire)
+{
 	/* 
 	 * Extract the IPv4 address from the answer section, following any
 	 * aliases that might be found, and return the string representation of
@@ -255,7 +361,8 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	 */
 }
 
-int send_recv_message(unsigned char *request, int requestlen, unsigned char *response, char *server, unsigned short port) {
+int send_recv_message(unsigned char *request, int requestlen, unsigned char *response, char *server, unsigned short port)
+{
 	/* 
 	 * Send a message (request) over UDP to a server (server) and port
 	 * (port) and wait for a response, which is placed in another byte
@@ -270,21 +377,23 @@ int send_recv_message(unsigned char *request, int requestlen, unsigned char *res
 	 */
 }
 
-dns_answer_entry *resolve(char *qname, char *server) {
+dns_answer_entry *resolve(char *qname, char *server)
+{
 	//Create DNS-friendly query
 	//create_dns_query(qname, , );
-
-
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
 	dns_answer_entry *ans;
-	if (argc < 3) {
+	if (argc < 3)
+	{
 		fprintf(stderr, "Usage: %s <domain name> <server>\n", argv[0]);
 		exit(1);
 	}
 	ans = resolve(argv[1], argv[2]);
-	while (ans != NULL) {
+	while (ans != NULL)
+	{
 		printf("%s\n", ans->value);
 		ans = ans->next;
 	}
