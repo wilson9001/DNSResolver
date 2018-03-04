@@ -8,8 +8,6 @@
 #include <sys/socket.h>
 #include <stdbool.h>
 
-#define MAXLENGTH = 2000;
-
 typedef unsigned int dns_rr_ttl;
 typedef unsigned short dns_rr_type;
 typedef unsigned short dns_rr_class;
@@ -35,6 +33,8 @@ struct dns_answer_entry
 	struct dns_answer_entry *next;
 };
 typedef struct dns_answer_entry dns_answer_entry;
+
+const int MAXLENGTH = 2000;
 
 void print_bytes(unsigned char *bytes, int byteslen)
 {
@@ -379,8 +379,20 @@ int send_recv_message(unsigned char *request, int requestlen, unsigned char *res
 
 dns_answer_entry *resolve(char *qname, char *server)
 {
+	unsigned char queryWireInitial[MAXLENGTH];
+
 	//Create DNS-friendly query
-	//create_dns_query(qname, , );
+	unsigned short wireLength = create_dns_query(qname, 0x0001, queryWireInitial);
+
+	unsigned char queryWireFinal[wireLength];
+
+	for(int i = 0; i < wireLength; i++)
+	{
+		queryWireFinal[i] = queryWireInitial[i];
+	}
+
+	//Send query
+	
 }
 
 int main(int argc, char *argv[])
