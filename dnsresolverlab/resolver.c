@@ -275,10 +275,8 @@ int rr_to_wire(dns_rr rr, unsigned char *wire, int query_only)
 unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *wire)
 {
 	//Create header values
-	//dns_rr_type RRType = 0x01;
-	dns_rr_class RRClass = 0x0001;
-	dns_rr_count RRCount = 0;
-	dns_flags flags = 0x0100;
+	dns_rr_class RRClass = htons(0x0001);
+	dns_flags flags = htons(0x0100);
 	unsigned short offset = 0;
 
 	//Create random ID for query
@@ -312,7 +310,7 @@ unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *w
 	wire++;
 	offset++;
 	//No RR's
-	for (int i = 0; i < 5; i++)
+	for (int i = 0; i < 6; i++)
 	{
 		*wire = 0;
 		wire++;
@@ -329,6 +327,11 @@ unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *w
 	}
 
 	offset += (unsigned short)nameBytes;
+	wire += nameBytes;
+
+	*wire = 0;
+	wire++;
+	offset++;
 
 	dns_rr resourceRecord;
 	resourceRecord.class = RRClass;
@@ -342,6 +345,8 @@ unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *w
 	}
 
 	offset += (unsigned short)rrBytes;
+	wire += rrBytes;
+	//wire -= offset;
 
 	return offset;
 }
@@ -380,19 +385,33 @@ int send_recv_message(unsigned char *request, int requestlen, unsigned char *res
 dns_answer_entry *resolve(char *qname, char *server)
 {
 	unsigned char queryWireInitial[MAXLENGTH];
+	//unsigned char *queryWireStart = queryWireInitial;
 
 	//Create DNS-friendly query
-	unsigned short wireLength = create_dns_query(qname, 0x0001, queryWireInitial);
+	unsigned short wireLength = create_dns_query(qname, htons(0x0001), queryWireInitial);
 
 	unsigned char queryWireFinal[wireLength];
 
-	for(int i = 0; i < wireLength; i++)
+	for (int i = 0; i < wireLength; i++)
 	{
+		//queryWireFinal[i] = queryWireStart[i];
 		queryWireFinal[i] = queryWireInitial[i];
 	}
 
+	printf("Outgoing wire:\n");
+	for (int i = 1; i <= wireLength; i++)
+	{
+		printf("%x ", queryWireFinal[i - 1]);
+		if (i % 4 == 0)
+		{
+			printf("\n");
+		}
+	}
+
+	printf("\n\n");
+
+	exit(EXIT_SUCCESS);
 	//Send query
-	
 }
 
 int main(int argc, char *argv[])
