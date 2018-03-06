@@ -17,6 +17,12 @@ typedef unsigned short dns_rr_count;
 typedef unsigned short dns_query_id;
 typedef unsigned short dns_flags;
 
+/*union
+{
+	unsigned char ch[2];
+	unsigned short sh;
+} charToShort;*/
+
 typedef struct
 {
 	char *name;
@@ -40,7 +46,7 @@ const int MAXLENGTH = 2000;
 void print_bytes(unsigned char *bytes, int byteslen)
 {
 	int i, j, byteslen_adjusted;
-	unsigned char c;
+	//unsigned char c;
 
 	if (byteslen % 8)
 	{
@@ -179,9 +185,7 @@ int name_ascii_to_wire(char *name, unsigned char *wire)
 	return offset;
 }
 
-char *name_ascii_from_wire(unsigned char *wire, int *indexp)
-{
-	/* 
+/* 
 	 * Extract the wire-formatted DNS name at the offset specified by
 	 * *indexp in the array of bytes provided (wire) and return its string
 	 * representation (dot-separated labels) in a char array allocated for
@@ -194,11 +198,12 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 	 * OUTPUT: a string containing the string representation of the name,
 	 *              allocated on the heap.
 	 */
+char *name_ascii_from_wire(unsigned char *wire, int *indexp)
+{
+	
 }
 
-dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
-{
-	/* 
+/* 
 	 * Extract the wire-formatted resource record at the offset specified by
 	 * *indexp in the array of bytes provided (wire) and return a 
 	 * dns_rr (struct) populated with its contents. Update the value
@@ -214,6 +219,9 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 	 *              rdata_len, and rdata are skipped.
 	 * OUTPUT: the resource record (struct)
 	 */
+dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
+{
+	
 }
 
 /* 
@@ -350,9 +358,7 @@ unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *w
 	return offset;
 }
 
-dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned char *wire)
-{
-	/* 
+/* 
 	 * Extract the IPv4 address from the answer section, following any
 	 * aliases that might be found, and return the string representation of
 	 * the IP address.  If no address is found, then return NULL.
@@ -363,6 +369,77 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	 * OUTPUT: a linked list of dns_answer_entrys the value member of each
 	 * reflecting either the name or IP address.  If
 	 */
+dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned char *wire)
+{
+	/*
+	set qname to the initial name queried
+	(i.e., the query name in the question section)
+	for each resource record (RR) in the answer section:
+	if the owner name of RR matches qname and the type matches the qtype:
+	extract the address from the RR, convert it to a string, and add it
+	to the result list
+	else if the owner name of RR matches qname and the type is (5) CNAME:
+	the name is an alias; extract the canonical name from the RR rdata,
+	and set qname to that value, and add it to the result list
+	return NULL (no match was found)
+	*/
+
+	//remove header and check for proper response
+	unsigned int byteOffset = 0;
+	//skip identification
+	byteOffset += 2;
+
+	/*unsigned char QRandRD = wire[byteOffset];
+	byteOffset++;
+	unsigned char otherFlags = wire[byteOffset];
+	byteoffSet++;
+	unsigned char 
+	if(QRandRD != 0x81 || otherFlags != 0x80)
+	{
+
+	}*/
+
+	//Test beginning of header
+	if(wire[byteOffset++] != 0x81 || wire[byteOffset++] != 0x80 || wire[byteOffset++] != 0 || wire[byteOffset++] != 0x01)
+	{
+		fprintf(stderr, "Beginning of response header is incorrect!\n");
+	}
+
+	//Get RR count
+	unsigned short RRCount = charsToShort(wire, byteOffset);
+	byteOffset += 2;
+	unsigned short authorityRRCount = charsToShort(wire, byteOffset);
+	byteOffset += 2;
+	unsigned short additionalRRCount = charsToShort(wire, byteOffset);
+	byteOffset += 2;
+
+	//If no RR's found then we return NULL
+	if((RRCount + authorityRRCount + additionalRRCount) == 0)
+	{
+		return NULL;
+	}
+
+	//we can skip the question header we don't need it
+	while(wire[byteOffset] != NULL)
+	{
+		unsigned char sectionLength = wire[byteOffset++];
+		byteOffset += sectionLength;
+	}
+
+	byteOffset++;
+
+	//Now we begin extracting RR's
+}
+
+//Helper function to convert the next two unsigned chars in network order (by placement) to an unsigned short in host order.
+unsigned short charsToShort(unsigned char *wire, int byteOffset)
+{
+	unsigned char toJoin[] = {wire[byteOffset++], wire[byteOffset]};
+	unsigned short beforeEndianConversion;
+
+	memcpy(&beforeEndianConversion, toJoin, 2);
+
+	return ntohs(beforeEndianConversion);
 }
 
 /* 
@@ -413,9 +490,9 @@ int send_recv_message(unsigned char *request, int requestlen, unsigned char *res
 dns_answer_entry *resolve(char *qname, char *server)
 {
 	unsigned char queryWireInitial[MAXLENGTH];
-
+	dns_rr_type qtype = htons(0x0001);
 	//Create DNS-friendly query
-	unsigned short wireLength = create_dns_query(qname, htons(0x0001), queryWireInitial);
+	unsigned short wireLength = create_dns_query(qname, qtype, queryWireInitial);
 
 	unsigned char queryWireFinal[wireLength];
 
@@ -445,6 +522,19 @@ dns_answer_entry *resolve(char *qname, char *server)
 
 	print_bytes(responseWire, responseBytes);
 
+	//parse message
+	dns_answer_entry *answerEntries = get_answer_address(qname, qtype, responseWire);
+
+	if(answerEntries == NULL)
+	{
+		fprintf(stderr, "No answer entries found!\n");
+		exit(EXIT_FAILURE);
+	}
+	else
+	{
+		printf("Entries returned\n");
+	}
+
 	exit(EXIT_SUCCESS);
 }
 
@@ -465,25 +555,63 @@ int main(int argc, char *argv[])
 }
 
 /*
-NAME
-inet_pton - convert IPv4 and IPv6 addresses from text to binary form
 
-SYNOPSIS
-#include <arpa/inet.h>
+DNS header:
+00	01	02	03	04	05	06	07 	08	09	10	11	12	13	14	15 	16	17	18	19	20	21	22	23 	24	25	26	27	28	29	30	31
+							Identification					   |QR |	Opcode 	   |AA 	TC 	RD 	RA 	Z 	AD 	CD |	Rcode
+							Total Questions 				   |						Total Answer RRs
+						  Total Authority RRs 				   |					   Total Additional RRs
+														Questions [] :::
+														Answer RRs [] :::
+														Authority RRs [] :::
+														Additional RRs [] :::
 
-int inet_pton(int af, const char *src, void *dst);
+Resource Record. Variable length.
+00	01	02	03	04	05	06	07 	08	09	10	11	12	13	14	15 	16	17	18	19	20	21	22	23 	24	25	26	27	28	29	30	31
+															 Name :::
+							Type 							   | 						   Class
+															  TTL
+						Rdata Length 						   |  						  Rdata :::
+Type. 16 bits, unsigned.
+1 = A, IPv4 address
 
-DESCRIPTION
-This  function  converts the character string src into a network address structure in the af address family, then copies the network address 
-structure to dst.  The af argument must be either AF_INET or AF_INET6.
+Class. 16 bits, unsigned.
+1 = IN, internet
 
-AF_INET
-src points to a character string containing an IPv4 network address in dotted-decimal format, "ddd.ddd.ddd.ddd", where ddd is a decimal number 
-of  up  to  three  digits  in  the  range  0  to  255. The  address is converted to a struct in_addr and copied to dst, which must be 
-sizeof(struct in_addr) (4) bytes (32 bits) long.
+A response to a query for www.example.com might look like this:
 
-RETURN VALUE
-inet_pton() returns 1 on success (network address was successfully converted). 0 is returned if src does not contain a character string
-representing a valid network address in the specified address family. If af does not contain a valid address family, -1 is returned and errno
-is  set  to EAFNOSUPPORT.
+27 d6 81 80
+00 01 00 01
+00 00 00 00
+03 77 77 77
+07 65 78 61
+6d 70 6c 65
+03 63 6f 6d
+00 00 01 00
+01 c0 0c 00
+01 00 01 00
+01 01 82 00
+04 5d b8 d8
+22
+
+In the above example, the following are the header values:
+• Identification (query ID): 0x27d6 Matches the query ID of the query.
+• QR flag: 1 (response)
+• Opcode: 0 (standard query)
+• Flags: The RD and RA bits are set (1); all others are cleared (0).
+• Total questions: 1
+• Total answer RRs: 1
+• Total authority RRs: 0
+• Total additional RRs: 0
+
+The question section is identical to that of the DNS query. The answer section contains a single resource record with the following values:
+• Owner name: www.example.com, encoded using compression encoding (encoding method shown later): c0 0c
+• Type: 1 (type A for address)
+• Class: 1 (IN for Internet class)
+• TTL: 0x00010182 or 65922 (about 18 hours)
+• Rdata length: 4 (an IPv4 address is four bytes)
+• Rdata: The bytes comprising the IP address corresponding to the owner name
+
+The name ascii from wire() and rr from wire() helper functions can be defined by you to help with this process. Additionally, the 
+externally-defined functions malloc(), memcpy(), inet ntop(), and strcmp() might be useful.
 */
