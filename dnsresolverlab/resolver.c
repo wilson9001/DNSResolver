@@ -429,6 +429,45 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	byteOffset++;
 
 	//Now we begin extracting RR's
+	dns_rr RRarray[50];
+	int arrayIndex = 0;
+
+	dns_answer_entry firstEntry;
+
+	/*
+	typedef struct
+{
+	char *name;
+	dns_rr_type type;
+	dns_rr_class class;
+	dns_rr_ttl ttl;
+	dns_rdata_len rdata_len;
+	unsigned char *rdata;
+} dns_rr;
+
+struct dns_answer_entry;
+struct dns_answer_entry
+{
+	char *value;
+	struct dns_answer_entry *next;
+};
+typedef struct dns_answer_entry dns_answer_entry;
+	*/
+
+	//Gather all RR's
+	do
+	{
+		RRarray[arrayIndex] = rr_from_wire(wire, &byteOffset, true);
+
+	}while(RRarray[arrayIndex++].name);
+	
+	arrayIndex--;
+
+	//Create RR answer linked list.
+	for(int i = 0; i < arrayIndex; i++)
+	{
+
+	}
 }
 
 //Helper function to convert the next two unsigned chars in network order (by placement) to an unsigned short in host order.
