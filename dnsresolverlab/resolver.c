@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <stdbool.h>
+#include <unistd.h>
 
 typedef unsigned int dns_rr_ttl;
 typedef unsigned short dns_rr_type;
@@ -100,9 +101,7 @@ void print_bytes(unsigned char *bytes, int byteslen)
 	printf("\n");
 }
 
-void canonicalize_name(char *name)
-{
-	/*
+/*
 	 * Canonicalize name in place.  Change all upper-case characters to
 	 * lower case and remove the trailing dot if there is any.  If the name
 	 * passed is a single dot, "." (representing the root zone), then it
@@ -110,7 +109,8 @@ void canonicalize_name(char *name)
 	 *
 	 * INPUT:  name: the domain name that should be canonicalized in place
 	 */
-
+void canonicalize_name(char *name)
+{
 	int namelen, i;
 
 	// leave the root zone alone
@@ -136,7 +136,7 @@ void canonicalize_name(char *name)
 	}
 }
 
-/* 
+	/* 
 	 * Convert a DNS name from string representation (dot-separated labels)
 	 * to DNS wire format, using the provided byte array (wire).  Return
 	 * the number of bytes used by the name in wire format.
@@ -346,7 +346,6 @@ unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *w
 
 	offset += (unsigned short)rrBytes;
 	wire += rrBytes;
-	//wire -= offset;
 
 	return offset;
 }
@@ -366,9 +365,7 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	 */
 }
 
-int send_recv_message(unsigned char *request, int requestlen, unsigned char *response, char *server, unsigned short port)
-{
-	/* 
+/* 
 	 * Send a message (request) over UDP to a server (server) and port
 	 * (port) and wait for a response, which is placed in another byte
 	 * array (response).  Create a socket, "connect()" it to the
@@ -376,16 +373,46 @@ int send_recv_message(unsigned char *request, int requestlen, unsigned char *res
 	 *
 	 * INPUT:  request: a pointer to an array of bytes that should be sent
 	 * INPUT:  requestlen: the length of request, in bytes.
-	 * INPUT:  response: a pointer to an array of bytes in which the
-	 *             response should be received
+	 * INPUT:  response: a pointer to an array of bytes in which the response should be received
 	 * OUTPUT: the size (bytes) of the response received
 	 */
+int send_recv_message(unsigned char *request, int requestlen, unsigned char *response, char *server, unsigned short port)
+{
+	struct sockaddr_in ip4addr;
+
+	ip4addr.sin_family = AF_INET;
+	ip4addr.sin_port = htons(port);
+
+	inet_pton(AF_INET, server, &ip4addr.sin_addr);
+
+	int sfd = socket(AF_INET, SOCK_DGRAM, 0);
+
+	if(connect(sfd, (struct sockaddr *)&ip4addr, sizeof(struct sockaddr_in)) < 0)
+	{
+		fprintf(stderr,"Could not connect!\n");
+		exit(EXIT_FAILURE);
+	}
+
+	if(write(sfd, request, requestlen) != requestlen)
+	{
+		fprintf(stderr, "Partial or failed transmission to DNS server!\n");
+		exit(EXIT_FAILURE);
+	}
+
+	int nread = read(sfd, /*(void *)*/response, MAXLENGTH);
+
+	if(nread == -1)
+	{
+		perror("read");
+		exit(EXIT_FAILURE);
+	}
+
+	return nread;
 }
 
 dns_answer_entry *resolve(char *qname, char *server)
 {
 	unsigned char queryWireInitial[MAXLENGTH];
-	//unsigned char *queryWireStart = queryWireInitial;
 
 	//Create DNS-friendly query
 	unsigned short wireLength = create_dns_query(qname, htons(0x0001), queryWireInitial);
@@ -394,7 +421,6 @@ dns_answer_entry *resolve(char *qname, char *server)
 
 	for (int i = 0; i < wireLength; i++)
 	{
-		//queryWireFinal[i] = queryWireStart[i];
 		queryWireFinal[i] = queryWireInitial[i];
 	}
 
@@ -410,8 +436,16 @@ dns_answer_entry *resolve(char *qname, char *server)
 
 	printf("\n\n");
 
-	exit(EXIT_SUCCESS);
 	//Send query
+	unsigned char responseWire[MAXLENGTH];
+	//port 53 is for DNS, 80 is usual HTTP
+	int responseBytes = send_recv_message(queryWireFinal, wireLength, responseWire, server, 53);
+
+	printf("Recieved %d bytes from DNS server.\n", responseBytes);
+
+	print_bytes(responseWire, responseBytes);
+
+	exit(EXIT_SUCCESS);
 }
 
 int main(int argc, char *argv[])
@@ -431,193 +465,25 @@ int main(int argc, char *argv[])
 }
 
 /*
-The first task is organizing the various components of the DNS query into a DNS query message. The query
-message is simply an array of unsigned char, which can be transmitted to the server over a UDP socket.
-Building the contents of that array is a matter of organizing and formatting the query components according
-to the DNS protocol specification. There are two major parts to the DNS query message: the DNS header
-and the DNS question section, which contains the query.
+NAME
+inet_pton - convert IPv4 and IPv6 addresses from text to binary form
 
-The create dns query() function has been declared in resolver.c and is intended as a helper func-
-tion to build the unsigned char array which will be transmitted to the server. Other helper functions in-
-clude name ascii to wire() and rr to wire(), also declared in resolver.c but left as an exer-
-cise to you to define. Note also the typedef declarations for dns rr and struct dns answer entry
-and the various DNS fields (e.g., dns rr type).
-The following functions might be useful for your message composition: strok(), strlen(), strncpy(),
-memcpy(), and (in some cases) malloc.
-*/
+SYNOPSIS
+#include <arpa/inet.h>
 
-/*
-DNS Header Format:
-|00|01|02|03|04|05|06|07|08|09|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|
-|						Identification			|QR|   Opcode  |AA|TC|RD|RA|Z |AD|CD|   Rcode   |
-|						Total Questions			|				Total Answer RRs				|
-|					Total Authority RRs			|		       Total Additonal RRs				|
+int inet_pton(int af, const char *src, void *dst);
 
-Identification. 16 bits.
-Used to match request/reply packets.
+DESCRIPTION
+This  function  converts the character string src into a network address structure in the af address family, then copies the network address 
+structure to dst.  The af argument must be either AF_INET or AF_INET6.
 
-QR, Query/Response. 1 bit.
-0 = Query
-1 = Response
+AF_INET
+src points to a character string containing an IPv4 network address in dotted-decimal format, "ddd.ddd.ddd.ddd", where ddd is a decimal number 
+of  up  to  three  digits  in  the  range  0  to  255. The  address is converted to a struct in_addr and copied to dst, which must be 
+sizeof(struct in_addr) (4) bytes (32 bits) long.
 
-Opcode. 4 bits. Since we are always doing standard query, this will be 0.
-
-AA, Authoritative Answer. 1 bit.
-Specifies that the responding name server is an authority for the domain name in question section. Note that the contents of the answer section may have multiple owner names because of aliases. This bit corresponds to the name which matches the query name, or the first owner name in the answer section.
-
-TC, Truncated. 1 bit.
-Indicates that only the first 512 bytes of the reply was returned.
-
-RD, Recursion Desired. 1 bit.
-May be set in a query and is copied into the response. If set, the name server is directed to pursue the query recursively. Recursive query support is optional.
-
-RA, Recursion Available. 1 bit.
-Indicates if recursive query support is available in the name server.
-
-Z. 1 bit.
-
-AD, Authenticated data. 1 bit.
-Indicates in a response that all data included in the answer and authority sections of the response have been authenticated by the server according to the policies of that server. It should be set only if all data in the response has been cryptographically verified or otherwise meets the server's local security policy.
-
-CD, Checking Disabled. 1 bit.
-
-Rcode, Return code. 4 bits.
-
-0 = Success
-1 = Format error
-2 = Server failure
-3 = Name error (meaningful only for authoritative servers)
-4 = Not implemented
-5 = Refused
-6 = Name should not exist but does
-7 = RR set should not exist but does
-8 = RR set should exist but does not
-9 = Server not authoritative
-10 = Name not in zone
-
-Total Questions. 16 bits, unsigned.
-Number of entries in the question list that were returned.
-Ours will be 1
-
-Total Answer RRs. 16 bits, unsigned.
-Number of entries in the answer resource record list that were returned.
-Ours will be 0
-
-Total Authority RRs. 16 bits, unsigned.
-Number of entries in the authority resource record list that were returned.
-Ours will be 0
-
-Total Additional RRs. 16 bits, unsigned.
-Number of entries in the additional resource record list that were returned.
-Ours will be 0
-
-Questions[]. Variable length.
-A list of zero or more Query structures.
-Ours will have 1
-
-Answer RRs[]. Variable length.
-A list of zero or more Answer Resource Record structures.
-Ours will have 0
-
-Authority RRs[]. Variable length.
-A list of zero or more Authority Resource Record structures.
-Ours will have 0
-Additional RRs[]. Variable length.
-A list of zero or more Additional Resource Record structures.
-Ours will have 0
-
-Query. Variable length.
-|00	01	02	03	04	05	06	07 	08	09	10	11	12	13	14	15 	16	17	18	19	20	21	22	23 	24	25	26	27	28	29	30	31|
-|													   Query Name :::														  |
-|							 Type 							   |							 Class							  |
-
-Resource Record. Variable length.
-|00	01	02	03	04	05	06	07 	08	09	10	11	12	13	14	15 	16	17	18	19	20	21	22	23 	24	25	26	27	28	29	30	31|
-|														   Name :::															  |
-|							 Type 							   |							 Class							  |
-|															  TTL															  |
-|						  Rdata Length 						   |							Rdata :::						  |
-
-Type. 16 bits, unsigned.
-1 = A (PIv4 address)
-28 = AAAA (IPv6 address)
-
-Class. 16 bits, unsigned.
-Ours will always be 1 for internet
-
-Authoritative Server.
-(RFC 2182) A server that knows the content of a DNS zone from local knowledge, and thus can answer queries about that zone without needing to query other servers.
-
-For example, a query for www.example.com looks like this:
-27 d6 01 00
-00 01 00 00
-00 00 00 00
-03 77 77 77
-07 65 78 61
-6d 70 6c 65
-03 63 6f 6d
-00 00 01 00
-01
-
-This is equivalent to:
-unsigned char msg[] = {
-0x27, 0xd6, 0x01, 0x00,
-0x00, 0x01, 0x00, 0x00,
-0x00, 0x00, 0x00, 0x00,
-0x03, 0x77, 0x77, 0x77,
-0x07, 0x65, 0x78, 0x61,
-0x6d, 0x70, 0x6c, 0x65,
-0x03, 0x63, 0x6f, 0x6d,
-0x00, 0x00, 0x01, 0x00,
-0x01
-};
-
-
-DNS Header Format:
-|00|01|02|03|04|05|06|07|08|09|10|11|12|13|14|15|16|17|18|19|20|21|22|23|24|25|26|27|28|29|30|31|
-|0  0  1  0  0  1  1  1  1  1  0  1  0  1  1  0 |0  0  0  0  0  0  0  1  0  0  0  0  0  0  0  0 | <--0x27, 0xd6, 0x01, 0x00
-|						Identification			|QR|   Opcode  |AA|TC|RD|RA|Z |AD|CD|   Rcode   |
-|0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  1 |0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | <--0x00, 0x01, 0x00, 0x00
-|						Total Questions			|				Total Answer RRs				|
-|0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 |0  0  0  0  0  0  0  0  0  0  0  0  0  0  0  0 | <--0x00, 0x00, 0x00, 0x00
-|					Total Authority RRs			|		       Total Additonal RRs				|
-
-
-• Identification (query ID): 0x27d6 This value is arbitrary and is typically randomly-generated when
-the query is formed (note that network protocols use network byte order, which is equivalent to Big-
-endian (most significant bytes are on the left).
-• QR flag: 0 (query)
-• Opcode: 0 (standard query)
-• Flags: The RD bit is set (1); all others are cleared (0).
-• Total questions: 1 (again, note the network byte ordering)
-• Total answer RRs: 0
-• Total authority RRs: 0
-• Total additional RRs: 0
-And the question section contains the query:
-• Query name: www.example.com, encoded as follows (encoding method shown later):
-03 77 77 77
-07 65 78 61
-6d 70 6c 65
-03 63 6f 6d
-00
-
-• Type: 1 (type A for address)
-• Class: 1 (IN for Internet class)
-
-Note that in this lab, you will only be issuing queryies for type 1 (A) and class 1 (IN). The header will
-largely look the same for all queries produced by your resolver—with only the Query ID changing (to
-random values). Similarly, the Question section will look the same, withonly the query name changing.
-
-Encoding is as follows:
-
-03 77 77 77 07 65 78 61 6d 70 6c 65 03 63 6f 6d 00
-   w  w  w     e  x  a  m  p  l  e     c  o  m
-
-The length of each label precedes the characters comprising the label itself (e.g., the value 3 precedes the
-three bytes representing the ASCII values www). A 0 in the length byte always indicates the end of the
-labels. Dots don't need to be encoded because they are implied by the next length indicator.
-
-The last two bytes give the type and class of the query.
-0x00 0x01 means type A (IPv4 Query)
-0x00 0x01 is class IN for internet
+RETURN VALUE
+inet_pton() returns 1 on success (network address was successfully converted). 0 is returned if src does not contain a character string
+representing a valid network address in the specified address family. If af does not contain a valid address family, -1 is returned and errno
+is  set  to EAFNOSUPPORT.
 */
