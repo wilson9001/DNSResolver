@@ -432,7 +432,8 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	dns_rr RRarray[50];
 	int arrayIndex = 0;
 
-	dns_answer_entry firstEntry;
+	dns_answer_entry *answerEntries = NULL;
+	dns_answer_entry *nextEntry = NULL;
 
 	/*
 	typedef struct
@@ -463,11 +464,45 @@ typedef struct dns_answer_entry dns_answer_entry;
 	
 	arrayIndex--;
 
-	//Create RR answer linked list.
-	for(int i = 0; i < arrayIndex; i++)
+	//Initialize RR list
+	if(arrayIndex)
 	{
-
+		if(RRarray[0].type == qtype)
+			{
+				nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
+				answerEntries = nextEntry;
+				strcpy(nextEntry->value, RRarray[0].rdata);
+			}
+			else if(RRarray[0].type == 5)//Name is an alias
+			{
+				nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
+				answerEntries = nextEntry;
+				canonicalize_file_name(/*(signed)*/RRarray[0].rdata);
+				strcpy(nextEntry->value, RRarray[0].rdata);
+			}
 	}
+
+	//Create rest of list
+	for(int i = 1; i < arrayIndex; i++)
+	{
+		nextEntry->next =(dns_answer_entry *) malloc(sizeof(dns_answer_entry));
+		nextEntry = nextEntry->next;
+		nextEntry->next = NULL;
+
+		if(!strcmp(RRarray[i].name, qname))
+		{
+			if(RRarray[i].type == qtype)
+			{
+				strcpy(nextEntry->value, RRarray[i].rdata);
+			}
+			else if(RRarray[i].type == 5)//Name is an alias
+			{
+				canonicalize_file_name(RRarray[i].rdata);
+				strcpy(nextEntry->value, RRarray[i].rdata);
+			}
+		}
+	}
+	return answerEntries;
 }
 
 //Helper function to convert the next two unsigned chars in network order (by placement) to an unsigned short in host order.
