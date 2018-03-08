@@ -142,7 +142,7 @@ void canonicalize_name(char *name)
 	}
 }
 
-	/* 
+/* 
 	 * Convert a DNS name from string representation (dot-separated labels)
 	 * to DNS wire format, using the provided byte array (wire).  Return
 	 * the number of bytes used by the name in wire format.
@@ -185,6 +185,17 @@ int name_ascii_to_wire(char *name, unsigned char *wire)
 	return offset;
 }
 
+//Helper function to convert the next two unsigned chars in network order (by placement) to an unsigned short in host order.
+unsigned short charsToShort(unsigned char *wire, int byteOffset)
+{
+	unsigned char toJoin[] = {wire[byteOffset++], wire[byteOffset]};
+	unsigned short beforeEndianConversion;
+
+	memcpy(&beforeEndianConversion, toJoin, 2);
+
+	return ntohs(beforeEndianConversion);
+}
+
 /* 
 	 * Extract the wire-formatted DNS name at the offset specified by
 	 * *indexp in the array of bytes provided (wire) and return its string
@@ -198,22 +209,22 @@ int name_ascii_to_wire(char *name, unsigned char *wire)
 	 */
 char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 {
-	char *name = (char *)malloc(sizeof(char)*100);
+	char *name = (char *)malloc(sizeof(char) * 100);
 	int nameIndex = 0;
 
-	while(wire[*indexp])
+	while (wire[*indexp])
 	{
 		//This section of name is compresed and must be extracted from elsewhere in the wire.
-		if(wire[*indexp] >= 192)
+		if (wire[*indexp] >= 192)
 		{
-			unsigned char beginningIndex = wire[*++indexp];
-			//*indexp++;
+			unsigned char beginningIndex = wire[++(*indexp)];
+			//(*indexp)++;
 
-			while(wire[beginningIndex])
+			while (wire[beginningIndex])
 			{
 				char sectionLength = wire[beginningIndex++];
 
-				for(int i = 0; i < sectionLength; i++)
+				for (int i = 0; i < sectionLength; i++)
 				{
 					name[nameIndex++] = wire[beginningIndex++];
 				}
@@ -223,15 +234,15 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 		}
 		else //This section of the name is not compressed.
 		{
-			char sectionLength = wire[*indexp++];
+			char sectionLength = wire[(*indexp)++];
 
-			for(int i = 0; i < sectionLength; i++)
+			for (int i = 0; i < sectionLength; i++)
 			{
-				name[nameIndex++] = wire[*indexp++];
+				name[nameIndex++] = wire[(*indexp)++];
 			}
 		}
 	}
-	*indexp++;
+	(*indexp)++;
 
 	return name;
 }
@@ -264,10 +275,10 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 
 	unsigned char TTLBytes[4];
 
-	TTLBytes[0] = wire[*indexp++];
-	TTLBytes[1] = wire[*indexp++];
-	TTLBytes[2] = wire[*indexp++];
-	TTLBytes[3] = wire[*indexp++];
+	TTLBytes[0] = wire[(*indexp)++];
+	TTLBytes[1] = wire[(*indexp)++];
+	TTLBytes[2] = wire[(*indexp)++];
+	TTLBytes[3] = wire[(*indexp)++];
 
 	int ttl;
 
@@ -280,9 +291,9 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 
 	unsigned char rData[resourceRecord.rdata_len];
 
-	for(int i = 0; i < resourceRecord.rdata_len; i++)
+	for (int i = 0; i < resourceRecord.rdata_len; i++)
 	{
-		rData[i] = wire[*indexp++];
+		rData[i] = wire[(*indexp)++];
 	}
 
 	resourceRecord.rdata = rData;
@@ -451,7 +462,7 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	*/
 
 	//remove header and check for proper response
-	unsigned int byteOffset = 0;
+	int byteOffset = 0;
 	//skip identification
 	byteOffset += 2;
 
@@ -466,7 +477,7 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	}*/
 
 	//Test beginning of header
-	if(wire[byteOffset++] != 0x81 || wire[byteOffset++] != 0x80 || wire[byteOffset++] != 0 || wire[byteOffset++] != 0x01)
+	if (wire[byteOffset++] != 0x81 || wire[byteOffset++] != 0x80 || wire[byteOffset++] != 0 || wire[byteOffset++] != 0x01)
 	{
 		fprintf(stderr, "Beginning of response header is incorrect!\n");
 	}
@@ -481,13 +492,13 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 
 	unsigned short totalRRCount = RRCount + authorityRRCount + additionalRRCount;
 	//If no RR's found then we return NULL
-	if(!totalRRCount)
+	if (!totalRRCount)
 	{
 		return NULL;
 	}
 
 	//we can skip the question header we don't need it
-	while(wire[byteOffset] != NULL)
+	while (wire[byteOffset] != 0x00)
 	{
 		unsigned char sectionLength = wire[byteOffset++];
 		byteOffset += sectionLength;
@@ -523,7 +534,7 @@ typedef struct dns_answer_entry dns_answer_entry;
 	*/
 
 	//Gather all RR's
-	for(; arrayIndex < totalRRCount; arrayIndex++)
+	for (; arrayIndex < totalRRCount; arrayIndex++)
 	{
 		RRarray[arrayIndex] = rr_from_wire(wire, &byteOffset, false);
 	}
@@ -536,58 +547,52 @@ typedef struct dns_answer_entry dns_answer_entry;
 	arrayIndex--;*/
 
 	//Initialize RR list
-	if(arrayIndex)
+	if (arrayIndex)
 	{
-		if(RRarray[0].type == qtype)
+		if (RRarray[0].type == qtype || RRarray[0].type == 5)
+		{
+			nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
+			answerEntries = nextEntry;
+
+			if (RRarray[0].type == qtype)
 			{
-				nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
-				answerEntries = nextEntry;
 				//strcpy(nextEntry->value, RRarray[0].rdata);
-				nextEntry->value = (char *) malloc(INET_ADDRSTRLEN);
+				nextEntry->value = (char *)malloc(INET_ADDRSTRLEN);
 				inet_ntop(AF_INET, RRarray[0].rdata, nextEntry->value, INET_ADDRSTRLEN);
 			}
-			else if(RRarray[0].type == 5)//Name is an alias
+			else if (RRarray[0].type == 5) //Name is an alias
 			{
-				nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
-				answerEntries = nextEntry;
-				canonicalize_file_name(/*(signed)*/RRarray[0].rdata);
-				nextEntry->value = RRarray[0].rdata;
+				canonicalize_name((char *) RRarray[0].rdata);
+				nextEntry->value =(char *) RRarray[0].rdata;
 				//strcpy(nextEntry->value, RRarray[0].rdata);
 			}
+		}
 	}
 
 	//Create rest of list
-	for(int i = 1; i < arrayIndex; i++)
+	for (int i = 1; i < arrayIndex; i++)
 	{
-		nextEntry->next =(dns_answer_entry *) malloc(sizeof(dns_answer_entry));
-		nextEntry = nextEntry->next;
-		nextEntry->next = NULL;
-
-		if(!strcmp(RRarray[i].name, qname))
+		if (!strcmp(RRarray[i].name, qname))
 		{
-			if(RRarray[i].type == qtype)
+			if (RRarray[i].type == qtype || RRarray[i].type == 5)
 			{
-				strcpy(nextEntry->value, RRarray[i].rdata);
-			}
-			else if(RRarray[i].type == 5)//Name is an alias
-			{
-				canonicalize_file_name(RRarray[i].rdata);
-				strcpy(nextEntry->value, RRarray[i].rdata);
+				nextEntry->next = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
+				nextEntry = nextEntry->next;
+				nextEntry->next = NULL;
+
+				if (RRarray[i].type == qtype)
+				{
+					strcpy(nextEntry->value, (char *) RRarray[i].rdata);
+				}
+				else if (RRarray[i].type == 5) //Name is an alias
+				{
+					canonicalize_name((char *) RRarray[i].rdata);
+					strcpy(nextEntry->value, (char *) RRarray[i].rdata);
+				}
 			}
 		}
 	}
 	return answerEntries;
-}
-
-//Helper function to convert the next two unsigned chars in network order (by placement) to an unsigned short in host order.
-unsigned short charsToShort(unsigned char *wire, int byteOffset)
-{
-	unsigned char toJoin[] = {wire[byteOffset++], wire[byteOffset]};
-	unsigned short beforeEndianConversion;
-
-	memcpy(&beforeEndianConversion, toJoin, 2);
-
-	return ntohs(beforeEndianConversion);
 }
 
 /* 
@@ -612,21 +617,21 @@ int send_recv_message(unsigned char *request, int requestlen, unsigned char *res
 
 	int sfd = socket(AF_INET, SOCK_DGRAM, 0);
 
-	if(connect(sfd, (struct sockaddr *)&ip4addr, sizeof(struct sockaddr_in)) < 0)
+	if (connect(sfd, (struct sockaddr *)&ip4addr, sizeof(struct sockaddr_in)) < 0)
 	{
-		fprintf(stderr,"Could not connect!\n");
+		fprintf(stderr, "Could not connect!\n");
 		exit(EXIT_FAILURE);
 	}
 
-	if(write(sfd, request, requestlen) != requestlen)
+	if (write(sfd, request, requestlen) != requestlen)
 	{
 		fprintf(stderr, "Partial or failed transmission to DNS server!\n");
 		exit(EXIT_FAILURE);
 	}
 
-	int nread = read(sfd, /*(void *)*/response, MAXLENGTH);
+	int nread = read(sfd, /*(void *)*/ response, MAXLENGTH);
 
-	if(nread == -1)
+	if (nread == -1)
 	{
 		perror("read");
 		exit(EXIT_FAILURE);
