@@ -193,14 +193,47 @@ int name_ascii_to_wire(char *name, unsigned char *wire)
 	 * value beyond the name.
 	 *
 	 * INPUT:  wire: a pointer to an array of bytes
-	 * INPUT:  indexp, a pointer to the index in the wire where the
-	 *              wire-formatted name begins
-	 * OUTPUT: a string containing the string representation of the name,
-	 *              allocated on the heap.
+	 * INPUT:  indexp, a pointer to the index in the wire where the wire-formatted name begins
+	 * OUTPUT: a string containing the string representation of the name, allocated on the heap.
 	 */
 char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 {
-	
+	char *name = (char *)malloc(sizeof(char)*100);
+	int nameIndex = 0;
+
+	while(wire[*indexp])
+	{
+		//This section of name is compresed and must be extracted from elsewhere in the wire.
+		if(wire[*indexp] >= 192)
+		{
+			unsigned char beginningIndex = wire[*++indexp];
+			//*indexp++;
+
+			while(wire[beginningIndex])
+			{
+				char sectionLength = wire[beginningIndex++];
+
+				for(int i = 0; i < sectionLength; i++)
+				{
+					name[nameIndex++] = wire[beginningIndex++];
+				}
+			}
+			//Once you go to compression then you are done with the name.
+			break;
+		}
+		else //This section of the name is not compressed.
+		{
+			char sectionLength = wire[*indexp++];
+
+			for(int i = 0; i < sectionLength; i++)
+			{
+				name[nameIndex++] = wire[*indexp++];
+			}
+		}
+	}
+	*indexp++;
+
+	return name;
 }
 
 /* 
@@ -221,7 +254,40 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 	 */
 dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 {
-	
+	dns_rr resourceRecord;
+
+	resourceRecord.name = name_ascii_from_wire(wire, indexp);
+	resourceRecord.type = charsToShort(wire, *indexp);
+	*indexp += 2;
+	resourceRecord.class = charsToShort(wire, *indexp);
+	*indexp += 2;
+
+	unsigned char TTLBytes[4];
+
+	TTLBytes[0] = wire[*indexp++];
+	TTLBytes[1] = wire[*indexp++];
+	TTLBytes[2] = wire[*indexp++];
+	TTLBytes[3] = wire[*indexp++];
+
+	int ttl;
+
+	memcpy(&ttl, TTLBytes, 4);
+
+	resourceRecord.ttl = ntohl(ttl);
+
+	resourceRecord.rdata_len = charsToShort(wire, *indexp);
+	*indexp += 2;
+
+	unsigned char rData[resourceRecord.rdata_len];
+
+	for(int i = 0; i < resourceRecord.rdata_len; i++)
+	{
+		rData[i] = wire[*indexp++];
+	}
+
+	resourceRecord.rdata = rData;
+
+	return resourceRecord;
 }
 
 /* 
@@ -413,8 +479,9 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	unsigned short additionalRRCount = charsToShort(wire, byteOffset);
 	byteOffset += 2;
 
+	unsigned short totalRRCount = RRCount + authorityRRCount + additionalRRCount;
 	//If no RR's found then we return NULL
-	if((RRCount + authorityRRCount + additionalRRCount) == 0)
+	if(!totalRRCount)
 	{
 		return NULL;
 	}
@@ -426,10 +493,10 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 		byteOffset += sectionLength;
 	}
 
-	byteOffset++;
+	byteOffset += 4;
 
 	//Now we begin extracting RR's
-	dns_rr RRarray[50];
+	dns_rr RRarray[totalRRCount];
 	int arrayIndex = 0;
 
 	dns_answer_entry *answerEntries = NULL;
@@ -456,13 +523,17 @@ typedef struct dns_answer_entry dns_answer_entry;
 	*/
 
 	//Gather all RR's
-	do
+	for(; arrayIndex < totalRRCount; arrayIndex++)
 	{
-		RRarray[arrayIndex] = rr_from_wire(wire, &byteOffset, true);
+		RRarray[arrayIndex] = rr_from_wire(wire, &byteOffset, false);
+	}
+	/*do
+	{
+		RRarray[arrayIndex] = rr_from_wire(wire, &byteOffset, false);
 
 	}while(RRarray[arrayIndex++].name);
 	
-	arrayIndex--;
+	arrayIndex--;*/
 
 	//Initialize RR list
 	if(arrayIndex)
@@ -471,14 +542,17 @@ typedef struct dns_answer_entry dns_answer_entry;
 			{
 				nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
 				answerEntries = nextEntry;
-				strcpy(nextEntry->value, RRarray[0].rdata);
+				//strcpy(nextEntry->value, RRarray[0].rdata);
+				nextEntry->value = (char *) malloc(INET_ADDRSTRLEN);
+				inet_ntop(AF_INET, RRarray[0].rdata, nextEntry->value, INET_ADDRSTRLEN);
 			}
 			else if(RRarray[0].type == 5)//Name is an alias
 			{
 				nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
 				answerEntries = nextEntry;
 				canonicalize_file_name(/*(signed)*/RRarray[0].rdata);
-				strcpy(nextEntry->value, RRarray[0].rdata);
+				nextEntry->value = RRarray[0].rdata;
+				//strcpy(nextEntry->value, RRarray[0].rdata);
 			}
 	}
 
@@ -596,20 +670,8 @@ dns_answer_entry *resolve(char *qname, char *server)
 
 	print_bytes(responseWire, responseBytes);
 
-	//parse message
-	dns_answer_entry *answerEntries = get_answer_address(qname, qtype, responseWire);
-
-	if(answerEntries == NULL)
-	{
-		fprintf(stderr, "No answer entries found!\n");
-		exit(EXIT_FAILURE);
-	}
-	else
-	{
-		printf("Entries returned\n");
-	}
-
-	exit(EXIT_SUCCESS);
+	//parse message and return list of RR's
+	return get_answer_address(qname, qtype, responseWire);
 }
 
 int main(int argc, char *argv[])
