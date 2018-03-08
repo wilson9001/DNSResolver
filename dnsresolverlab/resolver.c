@@ -189,9 +189,14 @@ int name_ascii_to_wire(char *name, unsigned char *wire)
 unsigned short charsToShort(unsigned char *wire, int byteOffset)
 {
 	unsigned char toJoin[] = {wire[byteOffset++], wire[byteOffset]};
+
+	//printf("Chars to short are: %d %d, ", toJoin[0], toJoin[1]);
+
 	unsigned short beforeEndianConversion;
 
 	memcpy(&beforeEndianConversion, toJoin, 2);
+
+	//printf("Short value is: %d\n", ntohs(beforeEndianConversion));
 
 	return ntohs(beforeEndianConversion);
 }
@@ -209,7 +214,7 @@ unsigned short charsToShort(unsigned char *wire, int byteOffset)
 	 */
 char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 {
-	char *name = (char *)malloc(sizeof(char) * 100);
+	char *name = (char *)malloc(/*sizeof(char) * */200);
 	int nameIndex = 0;
 
 	while (wire[*indexp])
@@ -217,14 +222,16 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 		//This section of name is compresed and must be extracted from elsewhere in the wire.
 		if (wire[*indexp] >= 192)
 		{
-			unsigned char beginningIndex = wire[++(*indexp)];
+			(*indexp)++;
+			unsigned char beginningIndex = wire[*indexp];
 			//(*indexp)++;
-
+		printf("Compression detected. Beginning index is %d\n",(char) beginningIndex);
 			while (wire[beginningIndex])
 			{
-				char sectionLength = wire[beginningIndex++];
+				char sectionLength = wire[beginningIndex++];/////
+				printf("Section length is %d\n", sectionLength);
 
-				for (int i = 0; i < sectionLength; i++)
+				for (int i = 0; i < sectionLength; i++)///
 				{
 					name[nameIndex++] = wire[beginningIndex++];
 				}
@@ -234,9 +241,9 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 		}
 		else //This section of the name is not compressed.
 		{
-			char sectionLength = wire[(*indexp)++];
+			char sectionLength = wire[(*indexp)++];/////
 
-			for (int i = 0; i < sectionLength; i++)
+			for (int i = 0; i < sectionLength; i++)/////
 			{
 				name[nameIndex++] = wire[(*indexp)++];
 			}
@@ -254,13 +261,9 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 	 * pointed to by indexp to the next value beyond the resource record.
 	 *
 	 * INPUT:  wire: a pointer to an array of bytes
-	 * INPUT:  indexp: a pointer to the index in the wire where the
-	 *              wire-formatted resource record begins
-	 * INPUT:  query_only: a boolean value (1 or 0) which indicates whether
-	 *              we are extracting a full resource record or only a
-	 *              query (i.e., in the question section of the DNS
-	 *              message).  In the case of the latter, the ttl,
-	 *              rdata_len, and rdata are skipped.
+	 * INPUT:  indexp: a pointer to the index in the wire where the wire-formatted resource record begins
+	 * INPUT:  query_only: a boolean value (1 or 0) which indicates whether we are extracting a full resource record or only a query (i.e., in the question section
+	 *  of the DNS message).  In the case of the latter, the ttl, rdata_len, and rdata are skipped.
 	 * OUTPUT: the resource record (struct)
 	 */
 dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
@@ -268,8 +271,12 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 	dns_rr resourceRecord;
 
 	resourceRecord.name = name_ascii_from_wire(wire, indexp);
+	printf("About to convert record type. Index is %d\n", *indexp);//value begins at index 145 with 1D |64| 6E
+
 	resourceRecord.type = charsToShort(wire, *indexp);
 	*indexp += 2;
+	printf("Record type is: %d\n", resourceRecord.type);
+
 	resourceRecord.class = charsToShort(wire, *indexp);
 	*indexp += 2;
 
@@ -289,7 +296,10 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 	resourceRecord.rdata_len = charsToShort(wire, *indexp);
 	*indexp += 2;
 
-	unsigned char rData[resourceRecord.rdata_len];
+	printf("rdata_length is %d\n", resourceRecord.rdata_len);
+	unsigned char *rData = (unsigned char *)malloc(resourceRecord.rdata_len);//The malloc before this one is screwing something up...
+	//unsigned char rData[resourceRecord.rdata_len];
+	printf("Resource Record created successfully\n");
 
 	for (int i = 0; i < resourceRecord.rdata_len; i++)
 	{
@@ -323,12 +333,12 @@ int rr_to_wire(dns_rr rr, unsigned char *wire, int query_only)
 	if (query_only)
 	{
 		dns_rr_class class = rr.class;
-		dns_rr_type type = rr.type;
+		//dns_rr_type type = rr.type;
 
 		unsigned char class1 = *((unsigned char *)&class);
 		unsigned char class2 = *((unsigned char *)&class + 1);
-		unsigned char type1 = *((unsigned char *)&type);
-		unsigned char type2 = *((unsigned char *)&type + 1);
+		unsigned char type1 = 0;//*((unsigned char *)&type);
+		unsigned char type2 = 1;//*((unsigned char *)&type + 1);
 
 		*wire = type1;
 		wire++;
@@ -496,7 +506,7 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	{
 		return NULL;
 	}
-
+	printf("RRCount is: %d\n", totalRRCount);
 	//we can skip the question header we don't need it
 	while (wire[byteOffset] != 0x00)
 	{
@@ -504,7 +514,7 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 		byteOffset += sectionLength;
 	}
 
-	byteOffset += 4;
+	byteOffset += 5;
 
 	//Now we begin extracting RR's
 	dns_rr RRarray[totalRRCount];
@@ -549,15 +559,21 @@ typedef struct dns_answer_entry dns_answer_entry;
 	//Initialize RR list
 	if (arrayIndex)
 	{
+		printf("Resource record returned. Values are: %s,%d\n",(char *) RRarray[0].rdata, RRarray[0].type);
+
 		if (RRarray[0].type == qtype || RRarray[0].type == 5)
 		{
+			printf("First record is type %d\n", RRarray[0].type);
 			nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
+			printf("Created first record struct\n");
+
 			answerEntries = nextEntry;
 
 			if (RRarray[0].type == qtype)
 			{
 				//strcpy(nextEntry->value, RRarray[0].rdata);
 				nextEntry->value = (char *)malloc(INET_ADDRSTRLEN);
+				printf("Teapot\n");
 				inet_ntop(AF_INET, RRarray[0].rdata, nextEntry->value, INET_ADDRSTRLEN);
 			}
 			else if (RRarray[0].type == 5) //Name is an alias
@@ -572,25 +588,32 @@ typedef struct dns_answer_entry dns_answer_entry;
 	//Create rest of list
 	for (int i = 1; i < arrayIndex; i++)
 	{
-		if (!strcmp(RRarray[i].name, qname))
-		{
+		//printf("RRarray name is %s", RRarray[i].name);
+		//if (!strcmp(RRarray[i].name, qname))
+		//{
+			printf("Array type is %d\n", RRarray[i].type);
 			if (RRarray[i].type == qtype || RRarray[i].type == 5)
 			{
 				nextEntry->next = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
 				nextEntry = nextEntry->next;
+
 				nextEntry->next = NULL;
 
 				if (RRarray[i].type == qtype)
 				{
-					strcpy(nextEntry->value, (char *) RRarray[i].rdata);
+					printf("ABout to strcpy. Data is %s\n",(char *) RRarray[i].rdata);
+					nextEntry->value = (char *) malloc(INET_ADDRSTRLEN);
+					//strcpy(nextEntry->value, (char *) RRarray[i].rdata);
+					inet_ntop(AF_INET, RRarray[i].rdata, nextEntry->value, INET_ADDRSTRLEN);
+					printf("successfully copied\n");
 				}
 				else if (RRarray[i].type == 5) //Name is an alias
 				{
 					canonicalize_name((char *) RRarray[i].rdata);
-					strcpy(nextEntry->value, (char *) RRarray[i].rdata);
+					nextEntry->value = (char *) RRarray[i].rdata;
 				}
 			}
-		}
+		//}
 	}
 	return answerEntries;
 }
@@ -643,7 +666,7 @@ int send_recv_message(unsigned char *request, int requestlen, unsigned char *res
 dns_answer_entry *resolve(char *qname, char *server)
 {
 	unsigned char queryWireInitial[MAXLENGTH];
-	dns_rr_type qtype = htons(0x0001);
+	dns_rr_type qtype = 1;
 	//Create DNS-friendly query
 	unsigned short wireLength = create_dns_query(qname, qtype, queryWireInitial);
 
