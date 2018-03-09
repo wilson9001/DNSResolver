@@ -256,6 +256,7 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 					{
 						name[nameIndex++] = wire[beginningIndex++];
 					}
+					name[nameIndex++] = '.';
 				}
 			}
 			//Once you go to compression then you are done with the name.
@@ -270,6 +271,7 @@ printf("\tName is now %ld bytes long, equals %s\n", strlen(name), name);
 			{
 				name[nameIndex++] = wire[(*indexp)++];
 			}
+			name[nameIndex++] = '.';
 		}
 	}
 	(*indexp)++;
@@ -294,6 +296,7 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 	dns_rr resourceRecord;
 
 	resourceRecord.name = name_ascii_from_wire(wire, indexp);
+	printf("Final RR name is %s\n", resourceRecord.name);
 	//printf("About to convert record type. Index is %d\n", *indexp); //value begins at index 145 with 1D |64| 6E
 
 	resourceRecord.type = charsToShort(wire, *indexp);
@@ -320,7 +323,7 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 	*indexp += 2;
 
 	printf("rdata_length is %d\n", resourceRecord.rdata_len);
-	unsigned char *rData = (unsigned char *)malloc(resourceRecord.rdata_len); //The malloc before this one is screwing something up...
+	unsigned char *rData = (unsigned char *)malloc(resourceRecord.rdata_len);
 	//unsigned char rData[resourceRecord.rdata_len];
 	//printf("Resource Record created successfully\n");
 
@@ -740,65 +743,3 @@ int main(int argc, char *argv[])
 		ans = ans->next;
 	}
 }
-
-/*
-
-DNS header:
-00	01	02	03	04	05	06	07 	08	09	10	11	12	13	14	15 	16	17	18	19	20	21	22	23 	24	25	26	27	28	29	30	31
-							Identification					   |QR |	Opcode 	   |AA 	TC 	RD 	RA 	Z 	AD 	CD |	Rcode
-							Total Questions 				   |						Total Answer RRs
-						  Total Authority RRs 				   |					   Total Additional RRs
-														Questions [] :::
-														Answer RRs [] :::
-														Authority RRs [] :::
-														Additional RRs [] :::
-
-Resource Record. Variable length.
-00	01	02	03	04	05	06	07 	08	09	10	11	12	13	14	15 	16	17	18	19	20	21	22	23 	24	25	26	27	28	29	30	31
-															 Name :::
-							Type 							   | 						   Class
-															  TTL
-						Rdata Length 						   |  						  Rdata :::
-Type. 16 bits, unsigned.
-1 = A, IPv4 address
-
-Class. 16 bits, unsigned.
-1 = IN, internet
-
-A response to a query for www.example.com might look like this:
-
-27 d6 81 80
-00 01 00 01
-00 00 00 00
-03 77 77 77
-07 65 78 61
-6d 70 6c 65
-03 63 6f 6d
-00 00 01 00
-01 c0 0c 00
-01 00 01 00
-01 01 82 00
-04 5d b8 d8
-22
-
-In the above example, the following are the header values:
-• Identification (query ID): 0x27d6 Matches the query ID of the query.
-• QR flag: 1 (response)
-• Opcode: 0 (standard query)
-• Flags: The RD and RA bits are set (1); all others are cleared (0).
-• Total questions: 1
-• Total answer RRs: 1
-• Total authority RRs: 0
-• Total additional RRs: 0
-
-The question section is identical to that of the DNS query. The answer section contains a single resource record with the following values:
-• Owner name: www.example.com, encoded using compression encoding (encoding method shown later): c0 0c
-• Type: 1 (type A for address)
-• Class: 1 (IN for Internet class)
-• TTL: 0x00010182 or 65922 (about 18 hours)
-• Rdata length: 4 (an IPv4 address is four bytes)
-• Rdata: The bytes comprising the IP address corresponding to the owner name
-
-The name ascii from wire() and rr from wire() helper functions can be defined by you to help with this process. Additionally, the 
-externally-defined functions malloc(), memcpy(), inet ntop(), and strcmp() might be useful.
-*/
