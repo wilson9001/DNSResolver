@@ -214,7 +214,7 @@ unsigned short charsToShort(unsigned char *wire, int byteOffset)
 	 */
 char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 {
-	char *name = (char *)malloc(/*sizeof(char) * */200);
+	char *name = (char *)malloc(/*sizeof(char) * */ 200);
 	int nameIndex = 0;
 
 	while (wire[*indexp])
@@ -225,25 +225,48 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 			(*indexp)++;
 			unsigned char beginningIndex = wire[*indexp];
 			//(*indexp)++;
-		printf("Compression detected. Beginning index is %d\n",(char) beginningIndex);
+
+			printf("\tCompression detected. Beginning index is %d\n", beginningIndex);
+
 			while (wire[beginningIndex])
 			{
-				char sectionLength = wire[beginningIndex++];/////
-				printf("Section length is %d\n", sectionLength);
-
-				for (int i = 0; i < sectionLength; i++)///
+				if (wire[beginningIndex] >= 192) ///Need to add recursive decompression
 				{
-					name[nameIndex++] = wire[beginningIndex++];
+					beginningIndex++;
+					printf("\t\tRecursive compression detected. Recursive index is %d\n", wire[beginningIndex]);
+					int offset = (int)wire[beginningIndex];
+					char *compressedSection = name_ascii_from_wire(wire, &offset);
+					int sectionLength = strlen(compressedSection);
+					printf("\t\tRecursively compressed section was %s with length %d\n", compressedSection, sectionLength);
+					//strcpy((char *)&name[nameIndex], compressedSection);
+					for(int i = 0; i < sectionLength; i++)
+					{
+						name[nameIndex++] = compressedSection[i];
+					}
+					
+					break;
+				}
+
+				else
+				{
+					char sectionLength = wire[beginningIndex++];
+					printf("Section length is %d\n", sectionLength);
+
+					for (int i = 0; i < sectionLength; i++)
+					{
+						name[nameIndex++] = wire[beginningIndex++];
+					}
 				}
 			}
 			//Once you go to compression then you are done with the name.
+printf("\tName is now %ld bytes long, equals %s\n", strlen(name), name);
 			break;
 		}
 		else //This section of the name is not compressed.
 		{
-			char sectionLength = wire[(*indexp)++];/////
+			char sectionLength = wire[(*indexp)++]; /////
 
-			for (int i = 0; i < sectionLength; i++)/////
+			for (int i = 0; i < sectionLength; i++) /////
 			{
 				name[nameIndex++] = wire[(*indexp)++];
 			}
@@ -271,11 +294,11 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 	dns_rr resourceRecord;
 
 	resourceRecord.name = name_ascii_from_wire(wire, indexp);
-	printf("About to convert record type. Index is %d\n", *indexp);//value begins at index 145 with 1D |64| 6E
+	//printf("About to convert record type. Index is %d\n", *indexp); //value begins at index 145 with 1D |64| 6E
 
 	resourceRecord.type = charsToShort(wire, *indexp);
 	*indexp += 2;
-	printf("Record type is: %d\n", resourceRecord.type);
+	//printf("Record type is: %d\n", resourceRecord.type);
 
 	resourceRecord.class = charsToShort(wire, *indexp);
 	*indexp += 2;
@@ -297,9 +320,9 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 	*indexp += 2;
 
 	printf("rdata_length is %d\n", resourceRecord.rdata_len);
-	unsigned char *rData = (unsigned char *)malloc(resourceRecord.rdata_len);//The malloc before this one is screwing something up...
+	unsigned char *rData = (unsigned char *)malloc(resourceRecord.rdata_len); //The malloc before this one is screwing something up...
 	//unsigned char rData[resourceRecord.rdata_len];
-	printf("Resource Record created successfully\n");
+	//printf("Resource Record created successfully\n");
 
 	for (int i = 0; i < resourceRecord.rdata_len; i++)
 	{
@@ -337,8 +360,8 @@ int rr_to_wire(dns_rr rr, unsigned char *wire, int query_only)
 
 		unsigned char class1 = *((unsigned char *)&class);
 		unsigned char class2 = *((unsigned char *)&class + 1);
-		unsigned char type1 = 0;//*((unsigned char *)&type);
-		unsigned char type2 = 1;//*((unsigned char *)&type + 1);
+		unsigned char type1 = 0; //*((unsigned char *)&type);
+		unsigned char type2 = 1; //*((unsigned char *)&type + 1);
 
 		*wire = type1;
 		wire++;
@@ -559,13 +582,13 @@ typedef struct dns_answer_entry dns_answer_entry;
 	//Initialize RR list
 	if (arrayIndex)
 	{
-		printf("Resource record returned. Values are: %s,%d\n",(char *) RRarray[0].rdata, RRarray[0].type);
+		//printf("Resource record returned. Values are: %s,%d\n", (char *)RRarray[0].rdata, RRarray[0].type);
 
 		if (RRarray[0].type == qtype || RRarray[0].type == 5)
 		{
-			printf("First record is type %d\n", RRarray[0].type);
+			//printf("First record is type %d\n", RRarray[0].type);
 			nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
-			printf("Created first record struct\n");
+			//printf("Created first record struct\n");
 
 			answerEntries = nextEntry;
 
@@ -573,13 +596,13 @@ typedef struct dns_answer_entry dns_answer_entry;
 			{
 				//strcpy(nextEntry->value, RRarray[0].rdata);
 				nextEntry->value = (char *)malloc(INET_ADDRSTRLEN);
-				printf("Teapot\n");
+				//printf("Teapot\n");
 				inet_ntop(AF_INET, RRarray[0].rdata, nextEntry->value, INET_ADDRSTRLEN);
 			}
 			else if (RRarray[0].type == 5) //Name is an alias
 			{
-				canonicalize_name((char *) RRarray[0].rdata);
-				nextEntry->value =(char *) RRarray[0].rdata;
+				canonicalize_name((char *)RRarray[0].rdata);
+				nextEntry->value = (char *)RRarray[0].rdata;
 				//strcpy(nextEntry->value, RRarray[0].rdata);
 			}
 		}
@@ -591,28 +614,28 @@ typedef struct dns_answer_entry dns_answer_entry;
 		//printf("RRarray name is %s", RRarray[i].name);
 		//if (!strcmp(RRarray[i].name, qname))
 		//{
-			printf("Array type is %d\n", RRarray[i].type);
-			if (RRarray[i].type == qtype || RRarray[i].type == 5)
+		//printf("Array type is %d\n", RRarray[i].type);
+		if (RRarray[i].type == qtype || RRarray[i].type == 5)
+		{
+			nextEntry->next = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
+			nextEntry = nextEntry->next;
+
+			nextEntry->next = NULL;
+
+			if (RRarray[i].type == qtype)
 			{
-				nextEntry->next = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
-				nextEntry = nextEntry->next;
-
-				nextEntry->next = NULL;
-
-				if (RRarray[i].type == qtype)
-				{
-					printf("ABout to strcpy. Data is %s\n",(char *) RRarray[i].rdata);
-					nextEntry->value = (char *) malloc(INET_ADDRSTRLEN);
-					//strcpy(nextEntry->value, (char *) RRarray[i].rdata);
-					inet_ntop(AF_INET, RRarray[i].rdata, nextEntry->value, INET_ADDRSTRLEN);
-					printf("successfully copied\n");
-				}
-				else if (RRarray[i].type == 5) //Name is an alias
-				{
-					canonicalize_name((char *) RRarray[i].rdata);
-					nextEntry->value = (char *) RRarray[i].rdata;
-				}
+				//printf("ABout to strcpy. Data is %s\n", (char *)RRarray[i].rdata);
+				nextEntry->value = (char *)malloc(INET_ADDRSTRLEN);
+				//strcpy(nextEntry->value, (char *) RRarray[i].rdata);
+				inet_ntop(AF_INET, RRarray[i].rdata, nextEntry->value, INET_ADDRSTRLEN);
+				//printf("successfully copied\n");
 			}
+			else if (RRarray[i].type == 5) //Name is an alias
+			{
+				canonicalize_name((char *)RRarray[i].rdata);
+				nextEntry->value = (char *)RRarray[i].rdata;
+			}
+		}
 		//}
 	}
 	return answerEntries;
