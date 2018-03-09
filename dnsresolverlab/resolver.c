@@ -17,12 +17,6 @@ typedef unsigned short dns_rr_count;
 typedef unsigned short dns_query_id;
 typedef unsigned short dns_flags;
 
-/*union
-{
-	unsigned char ch[2];
-	unsigned short sh;
-} charToShort;*/
-
 typedef struct
 {
 	char *name;
@@ -46,7 +40,6 @@ const int MAXLENGTH = 2000;
 void print_bytes(unsigned char *bytes, int byteslen)
 {
 	int i, j, byteslen_adjusted;
-	//unsigned char c;
 
 	if (byteslen % 8)
 	{
@@ -190,13 +183,9 @@ unsigned short charsToShort(unsigned char *wire, int byteOffset)
 {
 	unsigned char toJoin[] = {wire[byteOffset++], wire[byteOffset]};
 
-	//printf("Chars to short are: %d %d, ", toJoin[0], toJoin[1]);
-
 	unsigned short beforeEndianConversion;
 
 	memcpy(&beforeEndianConversion, toJoin, 2);
-
-	//printf("Short value is: %d\n", ntohs(beforeEndianConversion));
 
 	return ntohs(beforeEndianConversion);
 }
@@ -224,21 +213,15 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 		{
 			(*indexp)++;
 			unsigned char beginningIndex = wire[*indexp];
-			//(*indexp)++;
-
-			//printf("\tCompression detected. Beginning index is %d\n", beginningIndex);
-
+			
 			while (wire[beginningIndex])
 			{
 				if (wire[beginningIndex] >= 192) ///Need to add recursive decompression
 				{
 					beginningIndex++;
-					//printf("\t\tRecursive compression detected. Recursive index is %d\n", wire[beginningIndex]);
 					int offset = (int)wire[beginningIndex];
 					char *compressedSection = name_ascii_from_wire(wire, &offset);
 					int sectionLength = strlen(compressedSection);
-					//printf("\t\tRecursively compressed section was %s with length %d\n", compressedSection, sectionLength);
-					//strcpy((char *)&name[nameIndex], compressedSection);
 					for(int i = 0; i < sectionLength; i++)
 					{
 						name[nameIndex++] = compressedSection[i];
@@ -250,8 +233,7 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 				else
 				{
 					char sectionLength = wire[beginningIndex++];
-					//printf("Section length is %d\n", sectionLength);
-
+					
 					for (int i = 0; i < sectionLength; i++)
 					{
 						name[nameIndex++] = wire[beginningIndex++];
@@ -260,14 +242,13 @@ char *name_ascii_from_wire(unsigned char *wire, int *indexp)
 				}
 			}
 			//Once you go to compression then you are done with the name.
-//printf("\tName is now %ld bytes long, equals %s\n", strlen(name), name);
-			break;
+break;
 		}
 		else //This section of the name is not compressed.
 		{
-			char sectionLength = wire[(*indexp)++]; /////
+			char sectionLength = wire[(*indexp)++];
 
-			for (int i = 0; i < sectionLength; i++) /////
+			for (int i = 0; i < sectionLength; i++)
 			{
 				name[nameIndex++] = wire[(*indexp)++];
 			}
@@ -296,13 +277,10 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 	dns_rr resourceRecord;
 
 	resourceRecord.name = name_ascii_from_wire(wire, indexp);
-	//printf("Final RR name is %s\n", resourceRecord.name);
-	//printf("About to convert record type. Index is %d\n", *indexp); //value begins at index 145 with 1D |64| 6E
-
+	
 	resourceRecord.type = charsToShort(wire, *indexp);
 	*indexp += 2;
-	//printf("Record type is: %d\n", resourceRecord.type);
-
+	
 	resourceRecord.class = charsToShort(wire, *indexp);
 	*indexp += 2;
 
@@ -322,10 +300,7 @@ dns_rr rr_from_wire(unsigned char *wire, int *indexp, int query_only)
 	resourceRecord.rdata_len = charsToShort(wire, *indexp);
 	*indexp += 2;
 
-	//printf("rdata_length is %d\n", resourceRecord.rdata_len);
 	unsigned char *rData = (unsigned char *)malloc(resourceRecord.rdata_len);
-	//unsigned char rData[resourceRecord.rdata_len];
-	//printf("Resource Record created successfully\n");
 
 if(resourceRecord.type == 1)
 {
@@ -334,7 +309,7 @@ if(resourceRecord.type == 1)
 		rData[i] = wire[(*indexp)++];
 	}
 }
-else if(resourceRecord.type == 5)/////
+else if(resourceRecord.type == 5)
 {
 	rData = (unsigned char *) name_ascii_from_wire(wire, indexp);
 }
@@ -365,12 +340,11 @@ int rr_to_wire(dns_rr rr, unsigned char *wire, int query_only)
 	if (query_only)
 	{
 		dns_rr_class class = rr.class;
-		//dns_rr_type type = rr.type;
 
 		unsigned char class1 = *((unsigned char *)&class);
 		unsigned char class2 = *((unsigned char *)&class + 1);
-		unsigned char type1 = 0; //*((unsigned char *)&type);
-		unsigned char type2 = 1; //*((unsigned char *)&type + 1);
+		unsigned char type1 = 0; 
+		unsigned char type2 = 1; 
 
 		*wire = type1;
 		wire++;
@@ -449,7 +423,6 @@ unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *w
 
 	if (!nameBytes)
 	{
-		//fprintf(stderr, "Failed to convert query name to DNS format!\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -490,33 +463,10 @@ unsigned short create_dns_query(char *qname, dns_rr_type qtype, unsigned char *w
 	 */
 dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned char *wire)
 {
-	/*
-	set qname to the initial name queried
-	(i.e., the query name in the question section)
-	for each resource record (RR) in the answer section:
-	if the owner name of RR matches qname and the type matches the qtype:
-	extract the address from the RR, convert it to a string, and add it
-	to the result list
-	else if the owner name of RR matches qname and the type is (5) CNAME:
-	the name is an alias; extract the canonical name from the RR rdata,
-	and set qname to that value, and add it to the result list
-	return NULL (no match was found)
-	*/
-
 	//remove header and check for proper response
 	int byteOffset = 0;
 	//skip identification
 	byteOffset += 2;
-
-	/*unsigned char QRandRD = wire[byteOffset];
-	byteOffset++;
-	unsigned char otherFlags = wire[byteOffset];
-	byteoffSet++;
-	unsigned char 
-	if(QRandRD != 0x81 || otherFlags != 0x80)
-	{
-
-	}*/
 
 	//Test beginning of header
 	if (wire[byteOffset++] != 0x81 || wire[byteOffset++] != 0x80 || wire[byteOffset++] != 0 || wire[byteOffset++] != 0x01)
@@ -538,7 +488,6 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	{
 		return NULL;
 	}
-	//printf("RRCount is: %d\n", totalRRCount);
 	//we can skip the question header we don't need it
 	while (wire[byteOffset] != 0x00)
 	{
@@ -555,60 +504,30 @@ dns_answer_entry *get_answer_address(char *qname, dns_rr_type qtype, unsigned ch
 	dns_answer_entry *answerEntries = NULL;
 	dns_answer_entry *nextEntry = NULL;
 
-	/*
-	typedef struct
-{
-	char *name;
-	dns_rr_type type;
-	dns_rr_class class;
-	dns_rr_ttl ttl;
-	dns_rdata_len rdata_len;
-	unsigned char *rdata;
-} dns_rr;
-
-struct dns_answer_entry;
-struct dns_answer_entry
-{
-	char *value;
-	struct dns_answer_entry *next;
-};
-typedef struct dns_answer_entry dns_answer_entry;
-	*/
-
 	//Gather all RR's
 	for (; arrayIndex < totalRRCount; arrayIndex++)
 	{
 		RRarray[arrayIndex] = rr_from_wire(wire, &byteOffset, false);
-		//printf("Name here is %s\n", RRarray[arrayIndex].name);
 	}
 
 	//Initialize RR list
 	if (arrayIndex)
 	{
-		//printf("Resource record returned. Values are: %s,%d\n", (char *)RRarray[0].rdata, RRarray[0].type);
-
 		if (RRarray[0].type == qtype || RRarray[0].type == 5)
 		{
-			//printf("First record is type %d\n", RRarray[0].type);
 			nextEntry = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
-			//printf("Created first record struct\n");
-
+		
 			answerEntries = nextEntry;
 
 			if (RRarray[0].type == qtype)
 			{
-				//strcpy(nextEntry->value, RRarray[0].rdata);
 				nextEntry->value = (char *)malloc(INET_ADDRSTRLEN);
-				//printf("Teapot\n");
 				inet_ntop(AF_INET, RRarray[0].rdata, nextEntry->value, INET_ADDRSTRLEN);
 			}
 			else if (RRarray[0].type == 5) //Name is an alias
 			{
-				//printf("Before name canonicalized: %s\n", RRarray[0].rdata);
-				//canonicalize_name((char *)RRarray[0].name);
-				//printf("After name canonicalized: %s\n", RRarray[0].rdata);
+				canonicalize_name((char *)RRarray[0].rdata);
 				nextEntry->value = (char *)RRarray[0].rdata;
-				//strcpy(nextEntry->value, RRarray[0].rdata);
 			}
 		}
 	}
@@ -616,10 +535,6 @@ typedef struct dns_answer_entry dns_answer_entry;
 	//Create rest of list
 	for (int i = 1; i < arrayIndex; i++)
 	{
-		//printf("RRarray name is %s", RRarray[i].name);
-		//if (!strcmp(RRarray[i].name, qname))
-		//{
-		//printf("Array type is %d\n", RRarray[i].type);
 		if (RRarray[i].type == qtype || RRarray[i].type == 5)
 		{
 			nextEntry->next = (dns_answer_entry *)malloc(sizeof(dns_answer_entry));
@@ -629,21 +544,15 @@ typedef struct dns_answer_entry dns_answer_entry;
 
 			if (RRarray[i].type == qtype)
 			{
-				//printf("ABout to strcpy. Data is %s\n", (char *)RRarray[i].rdata);
 				nextEntry->value = (char *)malloc(INET_ADDRSTRLEN);
-				//strcpy(nextEntry->value, (char *) RRarray[i].rdata);
 				inet_ntop(AF_INET, RRarray[i].rdata, nextEntry->value, INET_ADDRSTRLEN);
-				//printf("successfully copied\n");
-			}
+				}
 			else if (RRarray[i].type == 5) //Name is an alias
 			{
-				//printf("Before name canonicalized: %s\n", RRarray[i].rdata);
-				//canonicalize_name((char *)RRarray[i].name);
-				printf("After name canonicalized: %s\n", RRarray[i].rdata);
+				canonicalize_name((char *)RRarray[i].rdata);
 				nextEntry->value = (char *)RRarray[i].rdata;
 			}
 		}
-		//}
 	}
 	return answerEntries;
 }
@@ -682,7 +591,7 @@ int send_recv_message(unsigned char *request, int requestlen, unsigned char *res
 		exit(EXIT_FAILURE);
 	}
 
-	int nread = read(sfd, /*(void *)*/ response, MAXLENGTH);
+	int nread = read(sfd, response, MAXLENGTH);
 
 	if (nread == -1)
 	{
@@ -707,28 +616,11 @@ dns_answer_entry *resolve(char *qname, char *server)
 		queryWireFinal[i] = queryWireInitial[i];
 	}
 
-	/*printf("Outgoing wire:\n");
-	for (int i = 1; i <= wireLength; i++)
-	{
-		printf("%x ", queryWireFinal[i - 1]);
-		if (i % 4 == 0)
-		{
-			printf("\n");
-		}
-	}
-
-	printf("\n\n");*/
-
 	//Send query
 	unsigned char responseWire[MAXLENGTH];
-	//port 53 is for DNS, 80 is usual HTTP
-	/*int responseBytes =*/ send_recv_message(queryWireFinal, wireLength, responseWire, server, 53);
+	//port 53 is for DNS
+	send_recv_message(queryWireFinal, wireLength, responseWire, server, 53);
 
-	//printf("Recieved %d bytes from DNS server.\n", responseBytes);
-
-	//print_bytes(responseWire, responseBytes);
-
-	//parse message and return list of RR's
 	return get_answer_address(qname, qtype, responseWire);
 }
 
